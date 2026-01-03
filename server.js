@@ -50,7 +50,8 @@ const client = new Client({
   authStrategy: new LocalAuth({ dataPath: '/opt/render/project/src/uploads/.whatsapp-web.js' }),
   puppeteer: {
     headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    dumpio: true
   }
 });
 
@@ -69,7 +70,7 @@ client.on('ready', () => {
 client.on('disconnected', (reason) => {
   console.error('❌ WhatsApp disconnected:', reason);
   console.log('🔄 Reinitializing WhatsApp...');
-  client.initialize();
+  //client.initialize();
 });
 
 client.on('auth_failure', msg => {
