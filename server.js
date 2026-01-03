@@ -47,11 +47,13 @@ let latestQR = null;
 let isReady = false;
 
 const client = new Client({
-  authStrategy: new LocalAuth({ dataPath: '/opt/render/project/src/uploads/.whatsapp-web.js' }),
+  authStrategy: new LocalAuth({
+    dataPath: path.join(UPLOADS_DIR, '.whatsapp-web.js') // <-- permanent mounted folder
+  }),
   puppeteer: {
     headless: true,
     args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    dumpio: true
+    dumpio: true // optional, for debugging
   }
 });
 
