@@ -47,7 +47,7 @@ let latestQR = null;
 let isReady = false;
 
 const client = new Client({
-  authStrategy: new LocalAuth({ dataPath: '.wwebjs_auth' }),
+  authStrategy: new LocalAuth({ dataPath: '/opt/render/project/src/uploads/.whatsapp-web.js' }),
   puppeteer: {
     headless: true,
     args: ['--no-sandbox', '--disable-setuid-sandbox']
@@ -68,6 +68,8 @@ client.on('ready', () => {
 
 client.on('disconnected', (reason) => {
   console.error('❌ WhatsApp disconnected:', reason);
+  console.log('🔄 Reinitializing WhatsApp...');
+  client.initialize();
 });
 
 client.on('auth_failure', msg => {
