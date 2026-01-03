@@ -1,36 +1,106 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Basic Form</title>
-    <link rel="stylesheet" type="text/css"  href="style.css">
+<meta charset="UTF-8">
+<title>WhatsApp Message Utility</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body { font-family: Arial; background:#f4f4f4 }
+.container { max-width:500px;margin:auto;background:#fff;padding:20px }
+button,input { padding:10px;margin-top:10px;width:100% }
+.progress { height:20px;background:#ddd;border-radius:5px }
+.bar { height:100%;width:0%;background:green;border-radius:5px }
+</style>
 </head>
+
 <body>
-    <div class="container">
-        <h1>WhatsApp Message Utility</h1>
-        <form action="/upload" method="POST" enctype="multipart/form-data">
-            <div class="form-group">
-                <label for="message">Upload Excel File:</label>
-                <input type="file" id="file" name="file">
-            </div>
-            <input class="button" type="submit" value="Submit">
-        </form>
-    </div>
+<div class="container">
+<h2>WhatsApp Message Utility</h2>
+
+<script>
+const ADMIN_KEY = prompt('Enter Admin Key');
+</script>
+
+<!-- IMAGE UPLOAD -->
+<h3>Upload Image</h3>
+<input type="file" id="imageInput" accept="image/*">
+<button onclick="uploadImage()">Upload Image</button>
+<p id="imageStatus" style="color:red">❌ Image not uploaded</p>
+<img id="preview" style="max-width:100%;display:none">
+
+<hr>
+
+<!-- EXCEL UPLOAD -->
+<h3>Upload Excel</h3>
+<form id="excelForm">
+<input type="file" id="excelFile" required>
+<button id="excelBtn" disabled>Submit Excel</button>
+</form>
+
+<div class="progress">
+  <div class="bar" id="bar"></div>
+</div>
+<p id="progressText"></p>
+
+</div>
+
+<script>
+async function checkImageStatus() {
+  const res = await fetch('/image-status');
+  const data = await res.json();
+  if (data.uploaded) {
+    imageStatus.textContent = '✅ Image uploaded';
+    imageStatus.style.color = 'green';
+    excelBtn.disabled = false;
+    preview.src = '/vishwas-slip.jpg?' + Date.now();
+    preview.style.display = 'block';
+  }
+}
+
+async function uploadImage() {
+  const f = imageInput.files[0];
+  if (!f) return alert('Select image');
+
+  const fd = new FormData();
+  fd.append('image', f);
+
+  await fetch('/upload-image', {
+    method: 'POST',
+    headers: { 'x-admin-key': ADMIN_KEY },
+    body: fd
+  });
+
+  checkImageStatus();
+}
+
+excelForm.addEventListener('submit', async e => {
+  e.preventDefault();
+
+  const fd = new FormData();
+  fd.append('file', excelFile.files[0]);
+
+  await fetch('/upload', {
+    method: 'POST',
+    headers: { 'x-admin-key': ADMIN_KEY },
+    body: fd
+  });
+
+  pollProgress();
+});
+
+async function pollProgress() {
+  const res = await fetch('/progress');
+  const d = await res.json();
+  if (!d.total) return;
+
+  const p = Math.floor((d.processed / d.total) * 100);
+  bar.style.width = p + '%';
+  progressText.textContent = `Sent ${d.processed} / ${d.total}`;
+
+  if (d.processed < d.total) setTimeout(pollProgress, 3000);
+}
+
+checkImageStatus();
+</script>
 </body>
 </html>
-
-
-
-<!-- <!DOCTYPE html>
-<html>
-<head>
-    <title>Form Submission</title>
-</head>
-<body>
-    <form action="/upload" method="POST" enctype="multipart/form-data">
-        <input type="file" id="file" name="file"><br><br>
-        <input type="submit" value="Submit">
-    </form>
-</body>
-</html> -->
