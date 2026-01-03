@@ -57,6 +57,9 @@ const ADMIN_KEY = prompt('Enter Admin Key');
 </div>
 
 <script>
+const ADMIN_KEY = prompt('Enter Admin Key');
+
+// ---------- QR CODE SECTION ----------
 async function checkWhatsApp() {
   try {
     const res = await fetch('/qr');
@@ -81,6 +84,7 @@ async function checkWhatsApp() {
   }
 }
 
+// ---------- IMAGE UPLOAD ----------
 async function checkImageStatus() {
   const res = await fetch('/image-status');
   const data = await res.json();
@@ -88,7 +92,8 @@ async function checkImageStatus() {
     imageStatus.textContent = '✅ Image uploaded';
     imageStatus.style.color = 'green';
     excelBtn.disabled = false;
-    preview.src = '/vishwas-slip.jpg?' + Date.now();
+    // Update preview to use the new uploads folder
+    preview.src = '/uploads/vishwas-slip.jpg?' + Date.now();
     preview.style.display = 'block';
   } else {
     excelBtn.disabled = true;
@@ -111,9 +116,9 @@ async function uploadImage() {
   checkImageStatus();
 }
 
+// ---------- EXCEL UPLOAD ----------
 excelForm.addEventListener('submit', async e => {
   e.preventDefault();
-
   const f = excelFile.files[0];
   if (!f) return;
 
@@ -129,6 +134,7 @@ excelForm.addEventListener('submit', async e => {
   if (data.success) pollProgress();
 });
 
+// ---------- PROGRESS BAR ----------
 async function pollProgress() {
   const res = await fetch('/progress');
   const d = await res.json();
@@ -145,5 +151,6 @@ async function pollProgress() {
 checkWhatsApp();
 checkImageStatus();
 </script>
+
 </body>
 </html>
