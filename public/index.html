@@ -20,10 +20,6 @@ h2,h3 { margin-top:0 }
 <div class="container">
 <h2>WhatsApp Message Utility</h2>
 
-<script>
-const ADMIN_KEY = prompt('Enter Admin Key');
-</script>
-
 <!-- QR CODE SECTION -->
 <div class="qr" id="qrSection">
   <h3>WhatsApp QR</h3>
@@ -57,25 +53,32 @@ const ADMIN_KEY = prompt('Enter Admin Key');
 </div>
 
 <script>
-const ADMIN_KEY = prompt('Enter Admin Key');
+/* ========= ADMIN KEY ========= */
+let ADMIN_KEY = prompt('Enter Admin Key');
 
-// ---------- QR CODE SECTION ----------
+/* ========= QR CODE ========= */
 async function checkWhatsApp() {
   try {
     const res = await fetch('/qr');
     const text = await res.text();
+
     if (text.includes('already authenticated')) {
       qrStatus.textContent = '✅ WhatsApp connected';
       qrImg.style.display = 'none';
-      excelBtn.disabled = true; // Enable only after image is uploaded
-    } else if (text.includes('QR not ready')) {
+      excelBtn.disabled = true;
+    } 
+    else if (text.includes('QR not ready')) {
       qrStatus.textContent = '⏳ QR not ready, refresh in 5 sec';
       qrImg.style.display = 'none';
       setTimeout(checkWhatsApp, 5000);
-    } else {
+    } 
+    else {
       qrStatus.textContent = '📲 Scan this QR with WhatsApp';
-      qrImg.src = text.match(/src="([^"]+)"/)[1];
-      qrImg.style.display = 'block';
+      const match = text.match(/src="([^"]+)"/);
+      if (match) {
+        qrImg.src = match[1];
+        qrImg.style.display = 'block';
+      }
       setTimeout(checkWhatsApp, 5000);
     }
   } catch (err) {
@@ -84,15 +87,15 @@ async function checkWhatsApp() {
   }
 }
 
-// ---------- IMAGE UPLOAD ----------
+/* ========= IMAGE UPLOAD ========= */
 async function checkImageStatus() {
   const res = await fetch('/image-status');
   const data = await res.json();
+
   if (data.uploaded) {
     imageStatus.textContent = '✅ Image uploaded';
     imageStatus.style.color = 'green';
     excelBtn.disabled = false;
-    // Update preview to use the new uploads folder
     preview.src = '/uploads/vishwas-slip.jpg?' + Date.now();
     preview.style.display = 'block';
   } else {
@@ -116,7 +119,7 @@ async function uploadImage() {
   checkImageStatus();
 }
 
-// ---------- EXCEL UPLOAD ----------
+/* ========= EXCEL UPLOAD ========= */
 excelForm.addEventListener('submit', async e => {
   e.preventDefault();
   const f = excelFile.files[0];
@@ -130,11 +133,12 @@ excelForm.addEventListener('submit', async e => {
     headers: { 'x-admin-key': ADMIN_KEY },
     body: fd
   });
+
   const data = await res.json();
   if (data.success) pollProgress();
 });
 
-// ---------- PROGRESS BAR ----------
+/* ========= PROGRESS ========= */
 async function pollProgress() {
   const res = await fetch('/progress');
   const d = await res.json();
@@ -144,13 +148,16 @@ async function pollProgress() {
   bar.style.width = p + '%';
   progressText.textContent = `Sent ${d.processed} / ${d.total}`;
 
-  if (d.processed < d.total) setTimeout(pollProgress, 3000);
+  if (d.processed < d.total) {
+    setTimeout(pollProgress, 3000);
+  }
 }
 
-// INITIALIZE
+/* ========= INIT ========= */
 checkWhatsApp();
 checkImageStatus();
 </script>
+
 
 </body>
 </html>
