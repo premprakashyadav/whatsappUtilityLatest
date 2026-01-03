@@ -66,6 +66,10 @@ client.on('ready', () => {
   console.log('✅ WhatsApp connected');
 });
 
+client.on('disconnected', (reason) => {
+  console.error('❌ WhatsApp disconnected:', reason);
+});
+
 client.on('auth_failure', msg => {
   console.error('❌ Auth failure:', msg);
 });
