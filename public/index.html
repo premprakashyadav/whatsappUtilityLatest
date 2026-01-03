@@ -5,11 +5,14 @@
 <title>WhatsApp Message Utility</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-body { font-family: Arial; background:#f4f4f4 }
+body { font-family: Arial; background:#f4f4f4; }
 .container { max-width:500px;margin:auto;background:#fff;padding:20px }
 button,input { padding:10px;margin-top:10px;width:100% }
-.progress { height:20px;background:#ddd;border-radius:5px }
+.progress { height:20px;background:#ddd;border-radius:5px; margin-top:10px }
 .bar { height:100%;width:0%;background:green;border-radius:5px }
+.qr { text-align:center; margin-top:20px; }
+img { max-width:100%; }
+h2,h3 { margin-top:0 }
 </style>
 </head>
 
@@ -21,12 +24,21 @@ button,input { padding:10px;margin-top:10px;width:100% }
 const ADMIN_KEY = prompt('Enter Admin Key');
 </script>
 
+<!-- QR CODE SECTION -->
+<div class="qr" id="qrSection">
+  <h3>WhatsApp QR</h3>
+  <p id="qrStatus">⏳ Checking WhatsApp status...</p>
+  <img id="qrImg" style="display:none">
+</div>
+
+<hr>
+
 <!-- IMAGE UPLOAD -->
 <h3>Upload Image</h3>
 <input type="file" id="imageInput" accept="image/*">
 <button onclick="uploadImage()">Upload Image</button>
 <p id="imageStatus" style="color:red">❌ Image not uploaded</p>
-<img id="preview" style="max-width:100%;display:none">
+<img id="preview" style="display:none">
 
 <hr>
 
@@ -45,6 +57,30 @@ const ADMIN_KEY = prompt('Enter Admin Key');
 </div>
 
 <script>
+async function checkWhatsApp() {
+  try {
+    const res = await fetch('/qr');
+    const text = await res.text();
+    if (text.includes('already authenticated')) {
+      qrStatus.textContent = '✅ WhatsApp connected';
+      qrImg.style.display = 'none';
+      excelBtn.disabled = true; // Enable only after image is uploaded
+    } else if (text.includes('QR not ready')) {
+      qrStatus.textContent = '⏳ QR not ready, refresh in 5 sec';
+      qrImg.style.display = 'none';
+      setTimeout(checkWhatsApp, 5000);
+    } else {
+      qrStatus.textContent = '📲 Scan this QR with WhatsApp';
+      qrImg.src = text.match(/src="([^"]+)"/)[1];
+      qrImg.style.display = 'block';
+      setTimeout(checkWhatsApp, 5000);
+    }
+  } catch (err) {
+    qrStatus.textContent = '❌ Error fetching QR';
+    console.error(err);
+  }
+}
+
 async function checkImageStatus() {
   const res = await fetch('/image-status');
   const data = await res.json();
@@ -54,6 +90,8 @@ async function checkImageStatus() {
     excelBtn.disabled = false;
     preview.src = '/vishwas-slip.jpg?' + Date.now();
     preview.style.display = 'block';
+  } else {
+    excelBtn.disabled = true;
   }
 }
 
@@ -76,16 +114,19 @@ async function uploadImage() {
 excelForm.addEventListener('submit', async e => {
   e.preventDefault();
 
-  const fd = new FormData();
-  fd.append('file', excelFile.files[0]);
+  const f = excelFile.files[0];
+  if (!f) return;
 
-  await fetch('/upload', {
+  const fd = new FormData();
+  fd.append('file', f);
+
+  const res = await fetch('/upload', {
     method: 'POST',
     headers: { 'x-admin-key': ADMIN_KEY },
     body: fd
   });
-
-  pollProgress();
+  const data = await res.json();
+  if (data.success) pollProgress();
 });
 
 async function pollProgress() {
@@ -100,6 +141,8 @@ async function pollProgress() {
   if (d.processed < d.total) setTimeout(pollProgress, 3000);
 }
 
+// INITIALIZE
+checkWhatsApp();
 checkImageStatus();
 </script>
 </body>
