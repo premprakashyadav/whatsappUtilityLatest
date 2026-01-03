@@ -3,60 +3,61 @@ const multer = require('multer');
 const XLSX = require('xlsx');
 const fs = require('fs');
 const path = require('path');
-const { Client, MessageMedia, LocalAuth } = require('whatsapp-web.js');
+const QRCode = require('qrcode');
+const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 
 const app = express();
 const PORT = process.env.PORT || 10000;
 
 /* ================= PATHS ================= */
 
-const PUBLIC_PATH = path.join(__dirname, 'public');
-const UPLOAD_PATH = path.join(__dirname, 'uploads');
-const QUEUE_FILE = path.join(__dirname, 'queue.json');
+const ROOT_DIR = __dirname;
+const PUBLIC_DIR = path.join(ROOT_DIR, 'public');
+const UPLOADS_DIR = path.join(PUBLIC_DIR, 'uploads');
 
-// Ensure uploads folder exists
-if (!fs.existsSync(UPLOAD_PATH)) {
-  fs.mkdirSync(UPLOAD_PATH, { recursive: true });
+if (!fs.existsSync(UPLOADS_DIR)) {
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
 
 /* ================= MIDDLEWARE ================= */
 
 app.use(express.json());
-app.use(express.static(PUBLIC_PATH));
-app.use('/uploads', express.static(UPLOAD_PATH));
+app.use(express.urlencoded({ extended: true }));
+app.use(express.static(PUBLIC_DIR));
+
+/* ================= HOME ================= */
 
 app.get('/', (req, res) => {
-  res.sendFile(path.join(PUBLIC_PATH, 'index.html'));
+  res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
 });
 
 /* ================= ADMIN AUTH ================= */
 
 function adminAuth(req, res, next) {
   const key = req.headers['x-admin-key'];
-  if (!key || key !== process.env.ADMIN_KEY) {
-    return res.status(401).json({ error: 'Unauthorized' });
+  if (key !== process.env.ADMIN_KEY) {
+    return res.status(401).send('Unauthorized');
   }
   next();
 }
 
 /* ================= WHATSAPP ================= */
 
+let latestQR = null;
+let isReady = false;
+
 const client = new Client({
-  authStrategy: new LocalAuth({
-    dataPath: path.join(UPLOAD_PATH, '.wwebjs_auth')
-  }),
+  authStrategy: new LocalAuth({ dataPath: '.wwebjs_auth' }),
   puppeteer: {
     headless: true,
     args: ['--no-sandbox', '--disable-setuid-sandbox']
   }
 });
 
-let latestQR = null;
-let isReady = false;
-
 client.on('qr', qr => {
   latestQR = qr;
   isReady = false;
+  console.log('📲 QR generated');
 });
 
 client.on('ready', () => {
@@ -65,22 +66,40 @@ client.on('ready', () => {
   console.log('✅ WhatsApp connected');
 });
 
+client.on('auth_failure', msg => {
+  console.error('❌ Auth failure:', msg);
+});
+
 client.initialize();
 
-/* ================= QR API ================= */
+/* ================= QR PAGE ================= */
 
-app.get('/qr', (req, res) => {
-  if (isReady) return res.send('✅ WhatsApp already authenticated');
-  if (!latestQR) return res.send('⏳ QR not ready');
+app.get('/qr', async (req, res) => {
+  if (isReady) {
+    return res.send('<h2>✅ WhatsApp already authenticated</h2>');
+  }
 
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${latestQR}`;
-  res.send(`<img src="${qrUrl}" />`);
+  if (!latestQR) {
+    return res.send('<h2>⏳ QR not ready. Refresh in 5 seconds</h2>');
+  }
+
+  try {
+    const qrImage = await QRCode.toDataURL(latestQR);
+    res.send(`
+      <h2>Scan QR with WhatsApp</h2>
+      <img src="${qrImage}" />
+      <p>WhatsApp → Linked Devices → Link a device</p>
+    `);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Failed to generate QR');
+  }
 });
 
 /* ================= IMAGE UPLOAD ================= */
 
 const imageStorage = multer.diskStorage({
-  destination: UPLOAD_PATH,
+  destination: (req, file, cb) => cb(null, UPLOADS_DIR),
   filename: (req, file, cb) => cb(null, 'vishwas-slip.jpg')
 });
 
@@ -88,32 +107,31 @@ const imageUpload = multer({
   storage: imageStorage,
   fileFilter: (req, file, cb) => {
     if (!file.mimetype.startsWith('image/')) {
-      return cb(new Error('Only images allowed'));
+      return cb(new Error('Only image files allowed'));
     }
     cb(null, true);
   }
 });
 
 app.post('/upload-image', adminAuth, imageUpload.single('image'), (req, res) => {
-  res.json({ success: true, url: '/uploads/vishwas-slip.jpg' });
+  res.json({ success: true });
 });
 
 app.get('/image-status', (req, res) => {
-  res.json({
-    uploaded: fs.existsSync(path.join(UPLOAD_PATH, 'vishwas-slip.jpg'))
-  });
+  const imgPath = path.join(UPLOADS_DIR, 'vishwas-slip.jpg');
+  res.json({ uploaded: fs.existsSync(imgPath) });
 });
 
 /* ================= EXCEL UPLOAD ================= */
 
 const upload = multer({ storage: multer.memoryStorage() });
 
-let jobQueue = [];
-let isProcessing = false;
-let totalRows = 0;
-let processedRows = 0;
+let queue = [];
+let processing = false;
+let total = 0;
+let processed = 0;
 
-app.post('/upload', adminAuth, upload.single('file'), (req, res) => {
+app.post('/upload', adminAuth, upload.single('file'), async (req, res) => {
   if (!isReady) return res.status(503).send('WhatsApp not ready');
   if (!req.file) return res.status(400).send('No file uploaded');
 
@@ -121,69 +139,63 @@ app.post('/upload', adminAuth, upload.single('file'), (req, res) => {
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   const data = XLSX.utils.sheet_to_json(sheet);
 
-  jobQueue.push(...data);
-  fs.writeFileSync(QUEUE_FILE, JSON.stringify(jobQueue));
+  queue.push(...data);
+  total = queue.length;
+  processed = 0;
 
   startWorker();
-  res.json({ success: true, total: data.length });
+  res.json({ success: true, total });
 });
 
 /* ================= PROGRESS ================= */
 
 app.get('/progress', (req, res) => {
-  res.json({ total: totalRows, processed: processedRows });
+  res.json({ total, processed });
 });
 
 /* ================= WORKER ================= */
 
 function normalizeNumber(num) {
-  num = num.toString().trim();
+  num = String(num).trim();
   return num.length === 10 ? '91' + num : num;
 }
 
-const delay = ms => new Promise(r => setTimeout(r, ms));
-const randomDelay = () => Math.floor(Math.random() * 15000) + 15000;
+function delay(ms) {
+  return new Promise(r => setTimeout(r, ms));
+}
 
-async function sendWhatsAppMessage(to, message) {
-  const chatId = `${normalizeNumber(to)}@c.us`;
-  const mediaPath = path.join(UPLOAD_PATH, 'vishwas-slip.jpg');
-  const media = MessageMedia.fromFilePath(mediaPath);
-  await client.sendMessage(chatId, media, { caption: message });
+async function sendMessage(row) {
+  if (!row.mobileNumber || !row.message) return;
+
+  const chatId = `${normalizeNumber(row.mobileNumber)}@c.us`;
+  const mediaPath = path.join(UPLOADS_DIR, 'vishwas-slip.jpg');
+
+  const media = fs.existsSync(mediaPath)
+    ? MessageMedia.fromFilePath(mediaPath)
+    : null;
+
+  if (media) {
+    await client.sendMessage(chatId, media, { caption: row.message });
+  } else {
+    await client.sendMessage(chatId, row.message);
+  }
 }
 
 async function startWorker() {
-  if (isProcessing) return;
-  isProcessing = true;
+  if (processing) return;
+  processing = true;
 
-  totalRows = jobQueue.length;
-  processedRows = 0;
-
-  while (jobQueue.length) {
-    const row = jobQueue.shift();
-    processedRows++;
-    fs.writeFileSync(QUEUE_FILE, JSON.stringify(jobQueue));
-
-    if (row.mobileNumber && row.message) {
-      try {
-        await sendWhatsAppMessage(row.mobileNumber, row.message);
-        await delay(randomDelay());
-      } catch (err) {
-        console.error('Send failed:', err.message);
-      }
-    }
+  while (queue.length) {
+    const row = queue.shift();
+    processed++;
+    await sendMessage(row);
+    await delay(15000); // 15 sec delay (safe)
   }
 
-  isProcessing = false;
+  processing = false;
 }
 
-/* ================= RESUME QUEUE ================= */
-
-if (fs.existsSync(QUEUE_FILE)) {
-  jobQueue = JSON.parse(fs.readFileSync(QUEUE_FILE));
-  startWorker();
-}
-
-/* ================= START SERVER ================= */
+/* ================= START ================= */
 
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
