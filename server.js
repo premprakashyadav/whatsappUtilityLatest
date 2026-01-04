@@ -48,12 +48,11 @@ let isReady = false;
 
 const client = new Client({
   authStrategy: new LocalAuth({
-    dataPath: path.join(UPLOADS_DIR, '.whatsapp-web.js') // <-- permanent mounted folder
+    dataPath: path.join(UPLOADS_DIR, '.whatsapp-web.js') // persistent disk
   }),
   puppeteer: {
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    dumpio: true // optional, for debugging
+    browserWSEndpoint: process.env.BROWSERLESS_WSS,
+    headless: true
   }
 });
 
