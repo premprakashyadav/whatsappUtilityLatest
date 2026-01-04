@@ -15,9 +15,8 @@ const ROOT_DIR = __dirname;
 const PUBLIC_DIR = path.join(ROOT_DIR, 'public');
 const UPLOADS_DIR = path.join(PUBLIC_DIR, 'uploads');
 
-if (!fs.existsSync(UPLOADS_DIR)) {
-  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-}
+// Create uploads folder if not exists
+if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
 /* ================= MIDDLEWARE ================= */
 
@@ -35,9 +34,7 @@ app.get('/', (req, res) => {
 
 function adminAuth(req, res, next) {
   const key = req.headers['x-admin-key'];
-  if (key !== process.env.ADMIN_KEY) {
-    return res.status(401).send('Unauthorized');
-  }
+  if (key !== process.env.ADMIN_KEY) return res.status(401).send('Unauthorized');
   next();
 }
 
@@ -46,30 +43,21 @@ function adminAuth(req, res, next) {
 let latestQR = null;
 let isReady = false;
 
+// Use LocalAuth with persistent volume
 const client = new Client({
   authStrategy: new LocalAuth({
-    dataPath: path.join(UPLOADS_DIR, '.whatsapp-web.js') // persistent disk
+    dataPath: path.join(UPLOADS_DIR, '.whatsapp-web.js')
   }),
   puppeteer: {
-    browserWSEndpoint: process.env.BROWSERLESS_WSS,
-    headless: true
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
   }
 });
 
-let qrCooldown = false;
-
 client.on('qr', qr => {
-  if (qrCooldown) return;
-
   latestQR = qr;
   isReady = false;
-  qrCooldown = true;
-
   console.log('📲 QR generated');
-
-  setTimeout(() => {
-    qrCooldown = false;
-  }, 30000); // 30 sec cooldown
 });
 
 client.on('ready', () => {
@@ -78,28 +66,22 @@ client.on('ready', () => {
   console.log('✅ WhatsApp connected');
 });
 
-client.on('disconnected', (reason) => {
+client.on('disconnected', reason => {
   console.error('❌ WhatsApp disconnected:', reason);
   console.log('🔄 Reinitializing WhatsApp...');
-  //client.initialize();
+  client.initialize();
 });
 
-client.on('auth_failure', msg => {
-  console.error('❌ Auth failure:', msg);
-});
+client.on('auth_failure', msg => console.error('❌ Auth failure:', msg));
 
 client.initialize();
 
-/* ================= QR PAGE ================= */
+/* ================= QR ENDPOINT ================= */
 
 app.get('/qr', async (req, res) => {
-  if (isReady) {
-    return res.send('<h2>✅ WhatsApp already authenticated</h2>');
-  }
+  if (isReady) return res.send('<h2>✅ WhatsApp already authenticated</h2>');
 
-  if (!latestQR) {
-    return res.send('<h2>⏳ QR not ready. Refresh in 5 seconds</h2>');
-  }
+  if (!latestQR) return res.send('<h2>⏳ QR not ready. Refresh in 5 sec</h2>');
 
   try {
     const qrImage = await QRCode.toDataURL(latestQR);
@@ -124,9 +106,7 @@ const imageStorage = multer.diskStorage({
 const imageUpload = multer({
   storage: imageStorage,
   fileFilter: (req, file, cb) => {
-    if (!file.mimetype.startsWith('image/')) {
-      return cb(new Error('Only image files allowed'));
-    }
+    if (!file.mimetype.startsWith('image/')) return cb(new Error('Only image files allowed'));
     cb(null, true);
   }
 });
@@ -143,7 +123,6 @@ app.get('/image-status', (req, res) => {
 /* ================= EXCEL UPLOAD ================= */
 
 const upload = multer({ storage: multer.memoryStorage() });
-
 let queue = [];
 let processing = false;
 let total = 0;
@@ -188,9 +167,7 @@ async function sendMessage(row) {
   const chatId = `${normalizeNumber(row.mobileNumber)}@c.us`;
   const mediaPath = path.join(UPLOADS_DIR, 'vishwas-slip.jpg');
 
-  const media = fs.existsSync(mediaPath)
-    ? MessageMedia.fromFilePath(mediaPath)
-    : null;
+  const media = fs.existsSync(mediaPath) ? MessageMedia.fromFilePath(mediaPath) : null;
 
   if (media) {
     await client.sendMessage(chatId, media, { caption: row.message });
@@ -207,13 +184,13 @@ async function startWorker() {
     const row = queue.shift();
     processed++;
     await sendMessage(row);
-    await delay(15000); // 15 sec delay (safe)
+    await delay(15000); // 15s between messages
   }
 
   processing = false;
 }
 
-/* ================= START ================= */
+/* ================= START SERVER ================= */
 
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
