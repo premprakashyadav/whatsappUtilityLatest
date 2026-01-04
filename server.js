@@ -56,10 +56,20 @@ const client = new Client({
   }
 });
 
+let qrCooldown = false;
+
 client.on('qr', qr => {
+  if (qrCooldown) return;
+
   latestQR = qr;
   isReady = false;
+  qrCooldown = true;
+
   console.log('📲 QR generated');
+
+  setTimeout(() => {
+    qrCooldown = false;
+  }, 30000); // 30 sec cooldown
 });
 
 client.on('ready', () => {
