@@ -46,13 +46,19 @@ let isReady = false;
 // Use LocalAuth with persistent volume
 const client = new Client({
   authStrategy: new LocalAuth({
-    dataPath: path.join(UPLOADS_DIR, '.whatsapp-web.js')
+    dataPath: '/data/.whatsapp-web.js'
   }),
   puppeteer: {
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
     headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage'
+    ]
   }
 });
+
 
 client.on('qr', qr => {
   latestQR = qr;
